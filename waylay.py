@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import sys
-import math
+import math, random
 import PythonMagick
 
 class Waypoint:
@@ -41,8 +41,9 @@ def main(mapFilename, waypointsFilename, calibrationFilename):
 
 	scale = calibratePoints(calibrationFilename)
 
-	mapSize = (10624, 10336)
-	(overlay, anchor) = makeWaypointLayer(waypointsFilename, mapSize)
+	#mapSize = (10624, 10336)
+	mapSize = (2000, 2000)
+	(overlay, anchor) = makeWaypointLayer(waypointsFilename, mapSize, scale)
 
 	#info(map)
 
@@ -88,7 +89,7 @@ def calibratePoints(calibrationFilename):
 	print("{} = {}\n{} = {}".format(xDiffs,scaleX,zDiffs,scaleZ))
 	return (scaleX, scaleZ)
 
-def makeWaypointLayer(waypointsFileName, mapSize, scale):
+def makeWaypointLayer(waypointsFilename, mapSize, scale):
 	# need to know how many pixels in the map that one block is
 	world = PythonMagick.Image(PythonMagick.Geometry(*mapSize), "none")
 		# * to unpack; none for no color
@@ -100,6 +101,7 @@ def makeWaypointLayer(waypointsFileName, mapSize, scale):
 				# ':' is delimiter
 				# ignore Death point's extra entry
 
+	writeWaypoint(world, waypoints[random.randint(0,len(waypoints)-1)])
 
 	# write
 	# for wp in waypoints:
@@ -114,8 +116,23 @@ def makeWaypointLayer(waypointsFileName, mapSize, scale):
 
 def writeWaypoint(image, waypoint):
 	# create a label, then position (without centering)
+	wpImg = PythonMagick.Image(PythonMagick.Geometry(200,20), "none")
+	#wpImg.backgroundColor(PythonMagick.Color("#00000080"))
 
-	pass
+	# pen color
+	wpImg.fillColor("#{}".format(waypoint.color))
+	wpImg.annotate(waypoint.text, PythonMagick.GravityType.CenterGravity)
+
+	# remove extra, then draw border around text
+	wpImg.trim()
+	wpImg.borderColor("black")
+	wpImg.border()
+
+	wpImg.opacity(0x8080)
+
+	#wpImg.resize(PythonMagick.Geometry(wpImg.size().width(), wpImg.size().height()))
+	#print("{} {} {}x{}".format(wpImg.fileName(), wpImg.magick(), wpImg.size().width(), wpImg.size().height()))
+	wpImg.write("test.png")
 
 def transformWorldToMap(worldPos):
 	# pass a tuple
