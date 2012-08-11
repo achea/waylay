@@ -29,9 +29,17 @@ class CalibrationPoint:
 		self.overlayX = float('NaN')
 		self.overlayZ = float('NaN')
 
+	def mapPos(self, mapX, mapZ):
+		self.mapX = int(mapX)
+		self.mapZ = int(mapZ)
+
 	def overlayPos(self, overlayX, overlayZ):
-		self.overlayX = overlayX
-		self.overlayZ = overlayZ
+		self.overlayX = int(overlayX)
+		self.overlayZ = int(overlayZ)
+
+	def __str__(self):
+		return "Map({},{}) == World({},{}) == Overlay({},{})".format( \
+				self.mapX, self.mapZ, self.worldX, self.worldZ, self.overlayX, self.overlayZ)
 
 def main(mapFilename, waypointsFilename, calibrationFilename):
 	# quadrant 4 of world is positive (i.e., SE, and negative is impossible)
@@ -39,11 +47,19 @@ def main(mapFilename, waypointsFilename, calibrationFilename):
 	#map = PythonMagick.Image("mapFilename")
 	#mapSize = (image.size().width(), image.size().height())
 
-	scale = calibratePoints(calibrationFilename)
+	(scale, calibPnt) = calibratePoints(calibrationFilename)
 
 	#mapSize = (10624, 10336)
-	mapSize = (2000, 2000)
-	(overlay, anchor) = makeWaypointLayer(waypointsFilename, mapSize, scale)
+	(overlay, anchor) = makeWaypointLayer(waypointsFilename, scale)
+
+	# calibration point goes from world to map
+	# anchor point has a world point, now calculate its corresponding map point
+	# since we know anchor is the upper-left-most point, we can always subtract from calibration point
+	xDiff = abs(anchor.worldX - calibPnt.worldX) * scale['x']
+	zDiff = abs(anchor.worldZ - calibPnt.worldZ) * scale['z']
+	anchor.mapPos(round(calibPnt.mapX - xDiff, 0), round(calibPnt.mapZ - zDiff, 0))
+	
+	print(anchor)
 
 	#info(map)
 
@@ -76,23 +92,24 @@ def calibratePoints(calibrationFilename):
 	zDiffs = []
 	for i in range(len(points)-1, -1, -1):			# start from valid upper index, to 0, step down
 		for j in range(i-1, -1, -1):
-			xDiffs.append((points[i].mapX - points[j].mapX)/(points[i].worldX - points[j].worldX))
+			xDiffs.append(math.fabs((points[i].mapX - points[j].mapX)/(points[i].worldX - points[j].worldX)))
 				# python 3 yields floats for division
-			zDiffs.append((points[i].mapZ - points[j].mapZ)/(points[i].worldZ - points[j].worldZ))
+			zDiffs.append(math.fabs((points[i].mapZ - points[j].mapZ)/(points[i].worldZ - points[j].worldZ)))
 				# division in python 3 returns a float
 				# numbers should never be negative
 
+	# assert ((min(xDiffs) > 0) and (min(zDiffs) > 0))
+
 	numPairs = choose(len(points), 2)
-	scaleX = round(sum(xDiffs)/numPairs, 5)		# average, then truncate
-	scaleZ = round(sum(zDiffs)/numPairs, 5)
+	scale = {}
+	scale['x'] = round(sum(xDiffs)/numPairs, 5)		# average, then truncate
+	scale['z'] = round(sum(zDiffs)/numPairs, 5)
 
-	print("{} = {}\n{} = {}".format(xDiffs,scaleX,zDiffs,scaleZ))
-	return (scaleX, scaleZ)
+	print("{} = {}\n{} = {}".format(xDiffs,scale['x'],zDiffs,scale['z']))
+	return (scale, points[0])		# the first point in the list
 
-def makeWaypointLayer(waypointsFilename, mapSize, scale):
+def makeWaypointLayer(waypointsFilename, scale):
 	# need to know how many pixels in the map that one block is
-	world = PythonMagick.Image(PythonMagick.Geometry(*mapSize), "none")
-		# * to unpack; none for no color
 
 	waypoints = []
 	with open(waypointsFilename) as file:
@@ -100,6 +117,41 @@ def makeWaypointLayer(waypointsFilename, mapSize, scale):
 			waypoints.append(Waypoint(*line.split(":")[:6]))
 				# ':' is delimiter
 				# ignore Death point's extra entry
+
+	# get the padding that divides evenly when inverse-scaled
+	# guaranteed to be at least one, since range goes through all divisors between multiples
+	padding = {'x': 200, 'z': 20}
+	# -- code for (exact) integer scaling
+	#temp = [i for i in range(scale['x']) if divmod(padding['x'] + i, scale['x']) == 0][0]
+	#padding['x'] += temp
+	#temp = [i for i in range(scale['z']) if divmod(padding['z'] + i, scale['z']) == 0][0]
+	#padding['z'] += temp
+
+	xWorld = [wp.x for wp in waypoints]
+	zWorld = [wp.z for wp in waypoints]
+	
+	minX = min(xWorld)
+	maxX = max(xWorld)
+	minZ = min(zWorld)
+	maxZ = max(zWorld)
+	
+	# calculate overlay (world) dimensions + padding
+	# scale could be non-integer, so we round result and convert to integer
+	xDim = int(round(abs(maxX - minX)*scale['x'] + padding['x'],0))
+	zDim = int(round(abs(maxZ - minZ)*scale['z'] + padding['z'],0))
+
+	# NW is negative, so we need the minX and minZ to equal (0,0)
+	# -- code for (exact) integer scaling
+	#anchor = CalibrationPoint(0,0, minX - divmod(padding['x'], scale['x'])[0],
+	#		minZ - divmod(padding['z'], scale['z'])[0])
+	anchor = CalibrationPoint(0, 0, minX - int(padding['x']//scale['x']),
+		minZ - int(padding['z']//scale['z']))
+		# the error comes from here
+	anchor.overlayPos(0,0)
+
+	print("waypoint overlay is {}x{}".format(xDim, zDim))
+	world = PythonMagick.Image(PythonMagick.Geometry(xDim, zDim), "none")
+		# * to unpack; none for no color
 
 	writeWaypoint(world, waypoints[random.randint(0,len(waypoints)-1)])
 
@@ -112,7 +164,7 @@ def makeWaypointLayer(waypointsFilename, mapSize, scale):
 	# add text overlay to a-x, b-y ((0,0) of world pxl onto map pxl)
 
 	world.write("overlay.png")
-	return (world, 0)
+	return (world, anchor)
 
 def writeWaypoint(image, waypoint):
 	# create a label, then position (without centering)
@@ -133,6 +185,8 @@ def writeWaypoint(image, waypoint):
 	#wpImg.resize(PythonMagick.Geometry(wpImg.size().width(), wpImg.size().height()))
 	#print("{} {} {}x{}".format(wpImg.fileName(), wpImg.magick(), wpImg.size().width(), wpImg.size().height()))
 	wpImg.write("test.png")
+
+	# 'image' is mutable, so it's passed by reference
 
 def transformWorldToMap(worldPos):
 	# pass a tuple
