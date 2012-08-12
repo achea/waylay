@@ -58,8 +58,17 @@ def main(mapFilename, waypointsFilename, calibrationFilename):
 	xDiff = abs(anchor.worldX - calibPnt.worldX) * scale['x']
 	zDiff = abs(anchor.worldZ - calibPnt.worldZ) * scale['z']
 	anchor.mapPos(round(calibPnt.mapX - xDiff, 0), round(calibPnt.mapZ - zDiff, 0))
-	
 	print(anchor)
+	
+	print("Reading {} ... ".format(mapFilename), end="")
+	map = PythonMagick.Image(mapFilename)
+	print("done\nWriting overlay ... ", end="")
+	map.composite(overlay, anchor.mapX + anchor.overlayX, anchor.mapZ + anchor.overlayZ,
+			PythonMagick.CompositeOperator.OverCompositeOp)
+		# TODO check if need to add overlayX/overlayZ (for now it works since they're both 0)
+	print("done\nSaving final map to map.png ... ", end="")
+	map.write("map.png")
+	print("done")
 
 	#info(map)
 
@@ -155,6 +164,7 @@ def makeWaypointLayer(waypointsFilename, scale):
 
 	assert (isinstance(anchor.overlayX, numbers.Integral) and isinstance(anchor.overlayZ, numbers.Integral))
 
+	print("Writing waypoints ... ", end="")
 	for waypoint in waypoints:
 		wpImg = makeWaypoint(waypoint)		# automatic garbage collection
 
@@ -168,10 +178,11 @@ def makeWaypointLayer(waypointsFilename, scale):
 		zDiff -= int(wpImg.size().height()//2)
 
 		# http://stackoverflow.com/questions/7793186/drawing-text-in-pythonmagick
-		print("{} ... ".format(waypoint.text), end="")
+		#print("{} ... ".format(waypoint.text), end="")
 		world.composite(wpImg, anchor.overlayX + xDiff, anchor.overlayZ + zDiff,
 				PythonMagick.CompositeOperator.OverCompositeOp)
-		print("done")
+
+	print("done")
 
 	# write
 	# for wp in waypoints:
@@ -181,7 +192,6 @@ def makeWaypointLayer(waypointsFilename, scale):
 	# how to shift wp which has world pxl coords of x, y to map pxl coords of a,b
 	# add text overlay to a-x, b-y ((0,0) of world pxl onto map pxl)
 
-	world.write("overlay.png")
 	return (world, anchor)
 
 def makeWaypoint(waypoint):
