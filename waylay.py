@@ -54,9 +54,8 @@ def main(mapFilename, waypointsFilename, calibrationFilename):
 
 	# calibration point goes from world to map
 	# anchor point has a world point, now calculate its corresponding map point
-	# since we know anchor is the upper-left-most point, we can always subtract from calibration point
-	xDiff = abs(anchor.worldX - calibPnt.worldX) * scale['x']
-	zDiff = abs(anchor.worldZ - calibPnt.worldZ) * scale['z']
+	xDiff = (calibPnt.worldX - anchor.worldX) * scale['x']
+	zDiff = (calibPnt.worldZ - anchor.worldZ) * scale['z']
 	anchor.mapPos(round(calibPnt.mapX - xDiff, 0), round(calibPnt.mapZ - zDiff, 0))
 	print(anchor)
 	
