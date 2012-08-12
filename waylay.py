@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import sys
-import math, random
+import math, numbers
 import PythonMagick
 
 class Waypoint:
@@ -153,7 +153,25 @@ def makeWaypointLayer(waypointsFilename, scale):
 	world = PythonMagick.Image(PythonMagick.Geometry(xDim, zDim), "none")
 		# * to unpack; none for no color
 
-	writeWaypoint(world, waypoints[random.randint(0,len(waypoints)-1)])
+	assert (isinstance(anchor.overlayX, numbers.Integral) and isinstance(anchor.overlayZ, numbers.Integral))
+
+	for waypoint in waypoints:
+		wpImg = makeWaypoint(waypoint)		# automatic garbage collection
+
+		# get distance from anchor and translate position
+		# since anchor is the upper-left, we can get the absolute distance then add it
+		xDiff = int(abs(round((anchor.worldX - waypoint.x)*scale['x'], 0)))
+		zDiff = int(abs(round((anchor.worldZ - waypoint.z)*scale['z'], 0)))
+
+		# center the image
+		xDiff -= int(wpImg.size().width()//2)		# floor division
+		zDiff -= int(wpImg.size().height()//2)
+
+		# http://stackoverflow.com/questions/7793186/drawing-text-in-pythonmagick
+		print("{} ... ".format(waypoint.text), end="")
+		world.composite(wpImg, anchor.overlayX + xDiff, anchor.overlayZ + zDiff,
+				PythonMagick.CompositeOperator.OverCompositeOp)
+		print("done")
 
 	# write
 	# for wp in waypoints:
@@ -166,7 +184,7 @@ def makeWaypointLayer(waypointsFilename, scale):
 	world.write("overlay.png")
 	return (world, anchor)
 
-def writeWaypoint(image, waypoint):
+def makeWaypoint(waypoint):
 	# create a label, then position (without centering)
 	wpImg = PythonMagick.Image(PythonMagick.Geometry(200,20), "none")
 	#wpImg.backgroundColor(PythonMagick.Color("#00000080"))
@@ -184,9 +202,8 @@ def writeWaypoint(image, waypoint):
 
 	#wpImg.resize(PythonMagick.Geometry(wpImg.size().width(), wpImg.size().height()))
 	#print("{} {} {}x{}".format(wpImg.fileName(), wpImg.magick(), wpImg.size().width(), wpImg.size().height()))
-	wpImg.write("test.png")
 
-	# 'image' is mutable, so it's passed by reference
+	return wpImg
 
 def transformWorldToMap(worldPos):
 	# pass a tuple
